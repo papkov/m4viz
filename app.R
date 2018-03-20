@@ -40,7 +40,7 @@ ui <- fluidPage(
       
     # Show a plot of the generated distribution
     mainPanel(
-       plotOutput("tsPlot")
+       plotlyOutput("tsPlot")
     )
  )
 
@@ -91,31 +91,51 @@ server <- function(input, output) {
     
     req(df_selected_index())
     
-    df_train()[df_selected_index(), ] %>% 
+    df <- df_train()[df_selected_index(), ] %>% 
       select(-c(1)) %>% 
       as.matrix %>% 
       t %>% 
       data.frame %>% 
       filter(!is.na(.))
+    
+    colnames(df) <- c("x")
+    df
   })
   
   df_test_filtered <- reactive({
     
     req(df_selected_index())
     
-    df_test()[df_selected_index(), ] %>% 
+    df <- df_test()[df_selected_index(), ] %>% 
       select(-c(1)) %>% 
       as.matrix %>% 
       t %>% 
-      data.frame %>% 
+      data.frame %>%
       filter(!is.na(.))
+    
+    colnames(df) <- c("x")
+    df
   })
   
-  output$tsPlot <- renderPlot({
+  output$tsPlot <- renderPlotly({
     
     # req(df_train_filtered())
-    print(df_train_filtered())
-    plot.ts(df_train_filtered())
+    df_train <- df_train_filtered() %>% 
+      mutate(n = 1:(nrow(.))) %>% 
+      mutate(cl = rep("tr", nrow(.)))
+    
+    df_test <- df_test_filtered() %>% 
+      mutate(n = nrow(df_train):(nrow(.) + nrow(df_train) - 1)) %>% 
+      mutate(cl = rep("te", nrow(.)))
+    
+    df <- rbind(df_train, df_test)
+    
+    p <- ggplot(df, aes(x = n, y = x, col = cl))+
+      geom_line()+
+      theme_bw()
+    
+    ggplotly(p)
+    # plot.ts(df_train_filtered())
     
   })
   
