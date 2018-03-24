@@ -1,12 +1,25 @@
-names_benchmarks <- c("Naive", "sNaive", "Naive2", "SES", "Holt", "Damped", "Theta", "Com")
+#This code can be used to reproduce the forecasts of the M4 Competition STATISTICAL Benchmarks and evaluate their accuracy
 
-## Metrics code are provided by organizers, I won't change them
+library(forecast) #Requires v8.2
 
+#################################################################################
+#In this example let us produce forecasts for 100 randomly generated timeseries
+fh <- 6 #The forecasting horizon examined
+frq <- 1 #The frequency of the data
+data_train = data_test <- NULL #Train and test sample
+for (i in 1:100){
+  data_all <- 2+ 0.15*(1:20) + rnorm(20) 
+  data_train[length(data_train)+1] <- list(ts(head(data_all,length(data_all)-fh),frequency = frq))
+  data_test[length(data_test)+1] <- list(tail(data_all,fh))
+}
+#################################################################################
+
+# Metrics are provided by organizers, I won't change them
 smape_cal <- function(outsample, forecasts){
   #Used to estimate sMAPE
   outsample <- as.numeric(outsample)
   forecasts <- as.numeric(forecasts)
-  smape <- (abs(outsample - forecasts) * 200) / (abs(outsample) + abs(forecasts))
+  smape <- (abs(outsample - forecasts)*200)/(abs(outsample)+abs(forecasts))
   
   return(smape)
 }
@@ -115,7 +128,7 @@ compute_deseason <- function(input, fh) {
   return(list(SIout = SIout, input = des_input))
 }
 
-default_forecasting <- function(input, fh){
+Benchmarks <- function(input, fh){
   #Used to estimate the statistical benchmarks of the M4 competition
   
   des <- compute_deseason(input, fh)
@@ -129,41 +142,42 @@ default_forecasting <- function(input, fh){
   f7 <- Theta.classic(input=des$input, fh=fh)$mean * des$SIout #Theta
   f8 <- (f4+f5+f6)/3 #Comb
   
-  res <- list(f1,f2,f3,f4,f5,f6,f7,f8)
-  names(res) <- names_benchmarks
+  return(list(f1,f2,f3,f4,f5,f6,f7,f8))
+}
+
+Names_benchmarks <- c("Naive", "sNaive", "Naive2", "SES", "Holt", "Damped", "Theta", "Com")
+Total_smape=Total_mase <- array(NA, dim = c(length(Names_benchmarks), fh, length(data_train)))
+
+#Methods, Horizon, time-series
+for (i in 1:length(data_train)){
   
-  return(res)
+  insample <- data_train[[i]]
+  outsample <- data_test[[i]]
+  forecasts <- Benchmarks(input=insample, fh=fh)
+  
+  #sMAPE
+  for (j in 1:length(Names_benchmarks)){
+    Total_smape[j,,i] <- smape_cal(outsample, forecasts[[j]]) #j the # of the benchmark
+  }
+  #MASE
+  for (j in 1:length(Names_benchmarks)){
+    Total_mase[j,,i] <- mase_cal(insample, outsample, forecasts[[j]]) #j the # of the benchmark
+  }
+  
 }
 
 
-get_forecasts <- function(data_train, data_test) {
-  fn <- length(data_test[[i]]) # Predict as many data points as there are in the test set
-  forecasts <- lapply(1:length(data_train), function(i) default_forecasting(data_train[[i]], fh))
+print("########### sMAPE ###############")
+for (i in 1:length(Names_benchmarks)){
+  print(paste(Names_benchmarks[i], round(mean(Total_smape[i,,]), 3)))
+}
+print("########### MASE ################")
+for (i in 1:length(Names_benchmarks)){
+  print(paste(Names_benchmarks[i], round(mean(Total_mase[i,,]), 3)))
+}
+print("########### OWA ################")
+for (i in 1:length(Names_benchmarks)){
+  print(paste(Names_benchmarks[i],
+              round(((mean(Total_mase[i,,])/mean(Total_mase[3,,]))+(mean(Total_smape[i,,])/mean(Total_smape[3,,])))/2, 3)))
 }
 
-## How to update forecasts table with custom predictions
-
-# updated_forecast <- lapply(forecasts, function(fc) {
-#   fc$new_var = c(1:6)
-#   fc
-# })
-
-
-get_smape <- function(data_test, forecasts) {
-  smape <- sapply(1:length(data_test), function(i) {
-    sapply(forecasts[[i]], function(fc) smape_cal(data_test[[i]], fc) %>% mean)
-  }) %>% t %>% data.frame
-}
-
-get_mase <- function(data_train, data_test, forecasts) {
-  mase <-  sapply(1:length(data_test), function(i) {
-    sapply(forecasts[[i]], function(fc) mase_cal(data_train[[i]], data_test[[i]], fc) %>% mean)
-  }) %>% t %>% data.frame
-}
-
-
-## How to calculate mean parameters
-
-#mean_mase <- apply(mase, 2, mean)
-#mean_smape <- apply(smape, 2, mean)
-#owa <- (mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2

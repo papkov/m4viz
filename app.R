@@ -1,16 +1,12 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(plotly)
 library(dplyr)
 library(data.table)
+library(forecast)
+
+# TODO
+# Generate reports
+# Histo
 
 options(shiny.maxRequestSize=300*1024^2) 
 
@@ -18,6 +14,8 @@ options(shiny.maxRequestSize=300*1024^2)
 DIR_DATA <- "./data/"
 DIR_TRAIN <- "%s%s/train/"
 DIR_TEST <- "%s%s/test/"
+
+# 
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -28,11 +26,13 @@ ui <- fluidPage(
    sidebarPanel(
      
    
-     # fileInput("file1", "Choose CSV File",
-     #           multiple = TRUE,
-     #           accept = c("text/csv",
-     #                      "text/comma-separated-values,text/plain",
-     #                      ".csv")),
+     fileInput("selectSubmission", "Choose submission file",
+               multiple = F,
+               accept = c("text/csv",
+                          "text/comma-separated-values,text/plain",
+                          ".csv")),
+     
+     br(),
      uiOutput("selectSizeUi"),
      uiOutput("selectTsUi"),
      uiOutput("selectRowUi")
