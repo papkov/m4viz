@@ -142,6 +142,8 @@ server <- function(input, output) {
         mutate(n = nrow(df_train):(nrow(.) + nrow(df_train) - 1)) %>% 
         gather(cl, x, -n)
       
+      # print(df_forecast)
+      
       df <- rbind(df_train, df_test, df_forecast)
     })
     return(df)

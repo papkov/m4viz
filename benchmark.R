@@ -125,45 +125,54 @@ simple_naive <- function(input, fh) {
 default_forecasting <- function(input, fh){
   #Used to estimate the statistical benchmarks of the M4 competition
   
-  # des <- compute_deseason(input, fh)
+  des <- compute_deseason(input, fh)
   
   # print("Naive")
   # f1 <- naive(input, h=fh)$mean #Naive
   f1 <- simple_naive(input, fh)
   # print("SNaive")
-  # f2 <- naive_seasonal(input, fh = fh) #Seasonal Naive
+  f2 <- naive_seasonal(input, fh = fh) #Seasonal Naive
   # print("Naive2")
-  # f3 <- naive(des$input, h = fh)$mean * des$SIout #Naive2
+  f3 <- naive(des$input, h = fh)$mean * des$SIout #Naive2
   # print("Ses")
-  # f4 <- ses(des$input, h = fh)$mean * des$SIout #Ses
+  f4 <- ses(des$input, h = fh)$mean * des$SIout #Ses
   # # print("Holt")
-  # f5 <- holt(des$input, h = fh, damped = F)$mean * des$SIout #Holt
+  f5 <- holt(des$input, h = fh, damped = F)$mean * des$SIout #Holt
   # # print("Damped")
-  # f6 <- holt(des$input, h = fh, damped = T)$mean * des$SIout #Damped
+  f6 <- holt(des$input, h = fh, damped = T)$mean * des$SIout #Damped
   # # print("Theta")
-  # f7 <- Theta.classic(input=des$input, fh=fh)$mean * des$SIout #Theta
+  f7 <- Theta.classic(input=des$input, fh=fh)$mean * des$SIout #Theta
   # # print("Comb")
-  # f8 <- (f4+f5+f6)/3 #Comb
+  f8 <- (f4+f5+f6)/3 #Comb
   # 
-  # res <- list(f1,f2,f3,f4,f5,f6,f7,f8)
-  res <- list(f1)
-  names(res) <- names_benchmarks[1]
+  res <- list(f1,f2,f3,f4,f5,f6,f7,f8)
+  # res <- list(f1)
+  names(res) <- names_benchmarks
   
   return(res)
 }
 
 # Predictions for our data
+# get_forecasts <- function(data_train, data_test) { 
+#   forecasts <- lapply(1:nrow(data_train), function(i) {
+#     # Predict as many data points as there are in the test set
+#     fh <- length(data_test[i, ])
+#     print(paste(i, "/", nrow(data_train)))
+#     
+#     data_train[i, ] %>% 
+#       select_if(!is.na(.)) %>% # Filter NA columns
+#       select(-c(1)) %>%  # First train col contains names, skip it 
+#       as.numeric() %>% 
+#       default_forecasting(fh)
+#   })
+# }
+
 get_forecasts <- function(data_train, data_test) { 
   forecasts <- lapply(1:nrow(data_train), function(i) {
-    # Predict as many data points as there are in the test set
+    # print(paste(i, "/", nrow(data_train)))
+    series <- na.omit(as.numeric(data_train[i,-1]))
     fh <- length(data_test[i, ])
-    print(paste(i, "/", nrow(data_train)))
-    
-    data_train[i, ] %>% 
-      select_if(!is.na(.)) %>% # Filter NA columns
-      select(-c(1)) %>%  # First train col contains names, skip it 
-      as.numeric() %>% 
-      default_forecasting(fh)
+    default_forecasting(series, fh)
   })
 }
 
