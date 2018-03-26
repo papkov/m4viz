@@ -195,12 +195,27 @@ get_forecasts_example <- function(data_train, data_test) {
 
 
 get_smape <- function(data_test, forecasts) {
+  smape <- sapply(1:nrow(data_test), function(i) {
+    sapply(forecasts[[i]], function(fc) smape_cal(data_test[i, ], fc) %>% mean)
+  }) %>% t %>% data.frame
+}
+
+get_mase <- function(data_train, data_test, forecasts) {
+  mase <-  sapply(1:nrow(data_test), function(i) {
+    train_series <- na.omit(as.numeric(data_train[i, -1]))
+    sapply(forecasts[[i]], function(fc) mase_cal(train_series, data_test[i, ], fc) %>% mean)
+  }) %>% t %>% data.frame
+}
+
+
+# Metrics for example data
+get_smape_example <- function(data_test, forecasts) {
   smape <- sapply(1:length(data_test), function(i) {
     sapply(forecasts[[i]], function(fc) smape_cal(data_test[[i]], fc) %>% mean)
   }) %>% t %>% data.frame
 }
 
-get_mase <- function(data_train, data_test, forecasts) {
+get_mase_example <- function(data_train, data_test, forecasts) {
   mase <-  sapply(1:length(data_test), function(i) {
     sapply(forecasts[[i]], function(fc) mase_cal(data_train[[i]], data_test[[i]], fc) %>% mean)
   }) %>% t %>% data.frame

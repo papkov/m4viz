@@ -4,6 +4,7 @@ library(dplyr)
 library(tidyr)
 library(data.table)
 library(forecast)
+library(DT)
 
 # TODO
 # Generate reports
@@ -31,7 +32,7 @@ ui <- fluidPage(
      
    
      fileInput("selectSubmission", "Choose submission file",
-               multiple = F,
+               multiple = T,
                accept = c("text/csv",
                           "text/comma-separated-values,text/plain",
                           ".csv")),
@@ -45,7 +46,11 @@ ui <- fluidPage(
       
     # Show a plot of the generated distribution
     mainPanel(
-       plotlyOutput("tsPlot")
+       plotlyOutput("tsPlot"),
+       br(),
+       DT::DTOutput("metricsRowUi"),
+       br(),
+       DT::DTOutput("metricsMeanUi")
     )
  )
 
@@ -90,6 +95,7 @@ server <- function(input, output) {
   df_train_filtered <- reactive({
     
     req(df_selected_index())
+    
     filter_df(df_train(), df_selected_index())
   })
 
@@ -97,6 +103,7 @@ server <- function(input, output) {
   df_test_filtered <- reactive({
     
     req(df_selected_index())
+    
     filter_df(df_test(), df_selected_index())
   })
   
@@ -109,13 +116,45 @@ server <- function(input, output) {
     get_forecasts(df_train(), df_test())
   })
   
+  # External predictions
+  
+  forecasts_external <- reactive({
+    
+    fe <- forecasts_default()
+    
+    if (!plyr::empty(input$selectSubmission)) {
+      # For each selected file read forecasts 
+      apply(input$selectSubmission, 1, function(f) {
+        path <- f["datapath"][[1]]
+        name <- f["name"][[1]]
+        df <- fread(path, header = T, sep = ",")
+        # Subset by intersection with the train data, remove colname
+        df <- df[df$V1 %in% df_train()$V1, -1]
+        # TODO make forecast invariant to sorting
+        
+        # Update default forecast
+        fe <<- lapply(1:length(fe), function(j) {
+          fc <- fe[[j]]
+          fc[[name]] <- as.numeric(df[j, ])
+          fc
+        })
+      })
+    }
+    
+    # print(names(fe[[1]]))
+    
+    return(fe)
+    
+  })
+  
   # Filter forecasts for rendering
   forecasts_filtered <- reactive({
     
     req(df_selected_index())
     req(input$selectMetrics)
     
-    forecasts_default()[[df_selected_index()]] %>% 
+    forecasts_external()[[df_selected_index()]] %>%
+    # forecasts_default()[[df_selected_index()]] %>% 
       data.frame %>% 
       select(input$selectMetrics)
   })
@@ -153,20 +192,27 @@ server <- function(input, output) {
   smape <- reactive({
     
     req(df_test())
-    req(forecasts_default())
+    req(forecasts_external())
     
-    get_smape(df_test(), forecasts_default())
+    withProgress(message = "Calculate SMAPE", value = 1, {
+      get_smape(df_test(), forecasts_external())
+    })
   })
   
   # Compute mase for all forecasts
-  smape <- reactive({
+  mase <- reactive({
     
     req(df_test())
     req(df_train())
-    req(forecasts_default())
+    req(forecasts_external())
     
-    get_mase(df_train(), df_test(), forecasts_default())
+    withProgress(message = "Calculate MASE", value = 1, {
+      get_mase(df_train(), df_test(), forecasts_external())
+    })
   })
+  
+  
+
   
   # UI ########
   
@@ -225,6 +271,32 @@ server <- function(input, output) {
                 choices = c("", names_benchmarks, input$selectSubmission$name), 
                 multiple = T,
                 selected = names_benchmarks[1])
+  })
+  
+  output$metricsRowUi <- DT::renderDT({
+    req(input$selectSize)
+    req(input$selectTs)
+    
+    row_smape <- smape()[df_selected_index(), ] %>% round(3)
+    row_mase <- mase()[df_selected_index(), ] %>% round(3)
+    row_metrics <- rbind(row_smape, row_mase) %>% 
+      DT::datatable(rownames = c("SMAPE", "MASE"),
+                    options = list(dom = 't'),
+                    caption = "Row metrics")
+  })
+  
+  output$metricsMeanUi <- DT::renderDT({
+    
+    req(input$selectSize)
+    
+    mean_mase <- apply(mase(), 2, mean) %>% round(3)
+    mean_smape <- apply(smape(), 2, mean) %>% round(3)
+    owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
+    
+    row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
+      DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
+                    options = list(dom = 't'),
+                    caption = "Mean metrics")
   })
   
 }
