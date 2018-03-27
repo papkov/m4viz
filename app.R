@@ -104,7 +104,7 @@ server <- function(input, output) {
     
     req(df_selected_index())
     
-    filter_df(df_test(), df_selected_index())
+    filter_df_test(df_test(), df_selected_index())
   })
   
   # Compute default forecasts
