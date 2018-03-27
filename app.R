@@ -279,8 +279,10 @@ server <- function(input, output) {
     
     row_smape <- smape()[df_selected_index(), ] %>% round(3)
     row_mase <- mase()[df_selected_index(), ] %>% round(3)
-    row_metrics <- rbind(row_smape, row_mase) %>% 
-      DT::datatable(rownames = c("SMAPE", "MASE"),
+    owa <- ((row_mase/row_mase[["Naive2"]] + row_smape/row_smape[["Naive2"]]) / 2) %>% round(3)
+    
+    row_metrics <- rbind(row_smape, row_mase, owa) %>% 
+      DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
                     caption = "Row metrics")
   })
