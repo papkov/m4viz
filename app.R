@@ -6,6 +6,9 @@ library(data.table)
 library(forecast)
 library(DT)
 
+library(compiler)
+enableJIT(3)
+
 # TODO
 # Generate reports
 # Histo
@@ -113,7 +116,9 @@ server <- function(input, output) {
     req(df_train())
     req(df_test())
     
-    get_forecasts(df_train(), df_test())
+    withProgress(value = 1, message = "Get forecasts", {
+      get_forecasts(df_train(), df_test())
+    })
   })
   
   # External predictions
