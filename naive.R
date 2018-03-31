@@ -75,6 +75,7 @@ res <- sapply(list.files(naive.path, full.names = F), function(file.name) {
   TRUE
 })
 
+# Save as csv
 write.csv(naive, 
           paste0("./data/naive_merged.csv"),
           row.names = F)
@@ -82,3 +83,9 @@ write.csv(naive,
 write.csv(naive2, 
           paste0("./data/naive2_merged.csv"),
           row.names = F)
+
+# Save as RData
+save(naive, naive2, file = "./data/naive.RData")
+
+# Load RData object
+load("./data/naive.RData")
