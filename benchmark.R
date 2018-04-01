@@ -1,31 +1,45 @@
 names_benchmarks <- c("Naive", "sNaive", "Naive2", "SES", "Holt", "Damped", "Theta", "Com")
+library(compiler)
 
 ## Metrics code are provided by organizers, I won't change them
 
-smape_cal <- function(outsample, forecasts){
-  #Used to estimate sMAPE
+smape_cal <- cmpfun(function(outsample, forecasts){
+  # estimate sMAPE
   outsample <- as.numeric(outsample)
   forecasts <- as.numeric(forecasts)
   smape <- (abs(outsample - forecasts) * 200) / (abs(outsample) + abs(forecasts))
   
-  return(smape)
-}
+  return(mean(smape))
+})
 
-mase_cal <- function(insample, outsample, forecasts){
-  #Used to estimate MASE
-  frq <- frequency(insample)
-  forecastsNaiveSD <- rep(NA, frq)
-  for (j in (frq+1):length(insample)){
-    forecastsNaiveSD <- c(forecastsNaiveSD, insample[j-frq])
-  }
-  masep <- mean(abs(insample-forecastsNaiveSD), na.rm = TRUE)
+mase_cal <- cmpfun(function(insample, outsample, forecasts){
+  # estimate MASE
+  # frq <- stats::frequency(insample)
+  frq <- 1
+  # forecastsNaiveSD <- c(rep(NA, frq), insample[(frq+1):length(insample) - frq])
+  
+  
+  # forecastsNaiveSD <- rep(NA, frq)
+  # 
+  # forecastsNaiveSD <- sapply((frq+1):length(insample), function(j) {
+  #   insample[j-frq]
+  # }) %>% c(forecastsNaiveSD, .)
+  # 
+  # 
+  # # for (j in (frq+1):length(insample)){
+  # #   forecastsNaiveSD <- c(forecastsNaiveSD, insample[j-frq])
+  # # }
+  
+  # masep <- mean(abs(insample-forecastsNaiveSD), na.rm = TRUE)
+  masep <- mean(abs(diff(insample, frq)))
   
   outsample <- as.numeric(outsample)
   forecasts <- as.numeric(forecasts)
   mase <- abs(outsample-forecasts) / masep
   
-  return(mase)
-}
+  return(mean(mase))
+})
+
 
 naive_seasonal <- function(input, fh){
   #Used to estimate Seasonal Naive
@@ -193,14 +207,75 @@ get_forecasts_example <- function(data_train, data_test) {
 #   fc
 # })
 
+# How to get the right subset of forecasts
+# fc.idx <- which(grepl(substr("Hourly.csv", 1, 1), naive_forecast$Naive$V1))
+# subset.idx <- data_test[, 1]
+# data_test$X <- NULL
 
-get_smape <- function(data_test, forecasts) {
+# New versions for list of dfs representation
+get_smape <- cmpfun(function(data_test, data_train, forecasts) {
+  smape <- lapply(forecasts, function(fc.df) {
+    # Make a subset of forecast
+    # fc.idx <- which(fc.df[, 1] %in% data_train[, 1])
+    fc.idx <- match(unlist(data_train[, 1]), unlist(fc.df[, 1])) # Invariant to the forecats sorting
+    fc.df <- fc.df[fc.idx, -1]
+    
+    pb <- txtProgressBar(max = nrow(data_test), style = 3)
+    # Iterate over data_test rows
+    smape <- sapply(1:nrow(data_test), function(i) {
+      fc <- fc.df[i, ] %>% as.numeric %>% na.omit
+      test <- data_test[i, ] %>% as.numeric %>% na.omit
+      s <- smape_cal(test, fc)
+      
+      setTxtProgressBar(pb, i)
+      s
+    })
+    close(pb)
+    smape
+  })
+  
+  names(smape) <- names(forecasts)
+  as.data.frame(smape)
+})
+
+get_mase <- cmpfun(function(data_test, data_train, forecasts) {
+  mase <- lapply(forecasts, function(fc.df) {
+    # Make a subset of forecast (data_train supposed to be sorted)
+    # fc.idx <- which(fc.df[, 1] %in% data_train[, 1])
+    fc.idx <- match(unlist(data_train[, 1]), unlist(fc.df[, 1])) # Invariant to the forecats sorting
+    fc.df <- fc.df[fc.idx, -1]
+    
+    # Iterate over data_test rows
+    pb <- txtProgressBar(max = nrow(data_test), style = 3)
+    mase <- sapply(1:nrow(data_test), function(i) {
+      train <- na.omit(as.numeric(data_train[i, -1]))
+      test <- na.omit(as.numeric(data_test[i, ]))
+      fc <- na.omit(as.numeric(fc.df[i, ]))
+      m <- mase_cal(train, test, fc)
+      
+      setTxtProgressBar(pb, i)
+      #tsensembler::mase(as.numeric(data_test[i, ]), fc)
+      #TSrepr::mase()
+      m
+    })
+    close(pb)
+    
+    mase
+  })
+  
+  names(mase) <- names(forecasts)
+  as.data.frame(mase)
+})
+
+
+# Old versions for list of lists representation
+get_smape_list <- function(data_test, forecasts) {
   smape <- sapply(1:nrow(data_test), function(i) {
     sapply(forecasts[[i]], function(fc) smape_cal(data_test[i, ], fc) %>% mean)
   }) %>% t %>% data.frame
 }
 
-get_mase <- function(data_train, data_test, forecasts) {
+get_mase_list <- function(data_train, data_test, forecasts) {
   mase <-  sapply(1:nrow(data_test), function(i) {
     train_series <- na.omit(as.numeric(data_train[i, -1]))
     sapply(forecasts[[i]], function(fc) mase_cal(train_series, data_test[i, ], fc) %>% mean)
@@ -227,3 +302,5 @@ get_mase_example <- function(data_train, data_test, forecasts) {
 #mean_mase <- apply(mase, 2, mean)
 #mean_smape <- apply(smape, 2, mean)
 #owa <- (mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2
+
+

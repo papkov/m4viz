@@ -25,6 +25,14 @@ source("./benchmark.R")
 # Load helpers
 source("./helper.R")
 
+# Load all naive predictions
+naive_forecast <- NULL # For syntax highlighting
+naive_smape <- NULL
+naive_mase <- NULL
+merged_train <- NULL
+merged_test <- NULL
+load("./data/naive_forecast.RData")
+
 # Define UI for application that draws a histogram
 ui <- fluidPage(
    
@@ -44,7 +52,8 @@ ui <- fluidPage(
      uiOutput("selectSizeUi"),
      uiOutput("selectTsUi"),
      uiOutput("selectRowUi"),
-     uiOutput("selectMetricsUi")
+     uiOutput("selectMetricsUi"),
+     uiOutput("btnRunBenchmarkUi")
    ),
       
     # Show a plot of the generated distribution
@@ -53,7 +62,9 @@ ui <- fluidPage(
        br(),
        DT::DTOutput("metricsRowUi"),
        br(),
-       DT::DTOutput("metricsMeanUi")
+       DT::DTOutput("metricsMeanUi"),
+       br(),
+       DT::DTOutput("benchmarkResultsUI")
     )
  )
 
@@ -113,15 +124,33 @@ server <- function(input, output) {
   # Compute default forecasts
   forecasts_default <- reactive({
     
-    req(df_train())
-    req(df_test())
+    # req(df_train())
+    # req(df_test())
     
-    withProgress(value = 1, message = "Get forecasts", {
-      get_forecasts(df_train(), df_test())
-    })
+    # Default forecasting is deprecacted
+    # withProgress(value = 1, message = "Get forecasts", {
+    #   get_forecasts(df_train(), df_test())
+    # })
+    
+    naive_forecast
+    
   })
   
   # External predictions
+  forecasts_raw <- reactive({
+    
+    req(input$selectSubmission)
+    
+    fc.dfs <- apply(input$selectSubmission, 1, function(f) {
+      path <- f["datapath"][[1]]
+      name <- f["name"][[1]]
+      
+      fread(path, header = T, sep = ",")
+    })
+    
+    names(fc.dfs) <- input$selectSubmission$name
+    fc.dfs
+  })
   
   forecasts_external <- reactive({
     
@@ -130,19 +159,30 @@ server <- function(input, output) {
     if (!plyr::empty(input$selectSubmission)) {
       # For each selected file read forecasts 
       apply(input$selectSubmission, 1, function(f) {
+
         path <- f["datapath"][[1]]
         name <- f["name"][[1]]
-        df <- fread(path, header = T, sep = ",")
-        # Subset by intersection with the train data, remove colname
-        df <- df[df$V1 %in% df_train()$V1, -1]
+        
+        df <- forecasts_raw()[[name]]
+        
+        # df <- fread(path, header = T, sep = ",")
+        # print(df)
+        # Order by naive predictions
+        df <- df[match(df$V1, fe$Naive$V1) %>% order, ]
+        
+        # Subset by intersection with the train data
+        df <- df[df$V1 %in% df_train()$V1, ]
         # TODO make forecast invariant to sorting
         
         # Update default forecast
-        fe <<- lapply(1:length(fe), function(j) {
-          fc <- fe[[j]]
-          fc[[name]] <- as.numeric(df[j, ])
-          fc
-        })
+        # fe <<- lapply(1:length(fe), function(j) {
+        #   fc <- fe[[j]]
+        #   fc[[name]] <- as.numeric(df[j, ])
+        #   fc
+        # })
+        
+        # Update in new format: list of dfs
+        fe[[name]] <<- df
       })
     }
     
@@ -156,17 +196,35 @@ server <- function(input, output) {
   forecasts_filtered <- reactive({
     
     req(df_selected_index())
+    req(df_train())
     req(input$selectMetrics)
     
-    forecasts_external()[[df_selected_index()]] %>%
-    # forecasts_default()[[df_selected_index()]] %>% 
+    # For each forecast df extract a particular row
+    fc.fil <- lapply(forecasts_external(), function(fc) {
+      # Check, where df_train row is in the forecast df
+      sname <- df_train()[df_selected_index(), 1] %>% unlist
+      idx <- which(fc[, 1] == sname)
+      print(paste(sname, idx))
+      fc[idx, ] %>% as.numeric %>% na.omit
+    }) 
+    names(fc.fil) <- names(forecasts_external())
+    
+    fc.fil %>% 
       data.frame %>% 
       select(input$selectMetrics)
+    
+    # Deprecated
+    # forecasts_external()[[df_selected_index()]] %>%
+    # # forecasts_default()[[df_selected_index()]] %>% 
+    #   data.frame %>% 
+    #   select(input$selectMetrics)
   })
   
   
   # Merge dataframe for plotting
   df_merged <- reactive({
+    
+    req(forecasts_filtered())
     
     # Enable progress bar
     withProgress(message = "Merge dataframes", value = 0, {
@@ -190,17 +248,31 @@ server <- function(input, output) {
       
       df <- rbind(df_train, df_test, df_forecast)
     })
-    return(df)
+    
+    df
   })
   
   # Compute smape for all forecasts
   smape <- reactive({
     
     req(df_test())
+    req(df_train())
     req(forecasts_external())
     
+    idx <- match(unlist(df_train()[, 1]), unlist(naive_smape[, 1]))
+    smape <- naive_smape[idx, -1]
+    
+    # Check for methods in forecasts_external others than naive and naive2
+    methods <- names(forecasts_external())
+    new_methods <- methods[!(methods %in% names(smape))]
+    
     withProgress(message = "Calculate SMAPE", value = 1, {
-      get_smape(df_test(), forecasts_external())
+      if (identical(new_methods, character(0))) {
+        return(smape)
+      } else {
+        new_smape <- get_smape(df_test(), df_train(), forecasts_external()[new_methods])
+        return(cbind(smape, new_smape))
+      }
     })
   })
   
@@ -211,9 +283,24 @@ server <- function(input, output) {
     req(df_train())
     req(forecasts_external())
     
+    idx <- match(unlist(df_train()[, 1]), unlist(naive_mase[, 1]))
+    mase <- naive_mase[idx, -1]    
+    
+    # Check for methods in forecasts_external others than naive and naive2
+    methods <- names(forecasts_external())
+    new_methods <- methods[!(methods %in% names(mase))]
+    
     withProgress(message = "Calculate MASE", value = 1, {
-      get_mase(df_train(), df_test(), forecasts_external())
+      if (identical(new_methods, character(0))) {
+        return(mase)
+      } else {
+        new_mase <- get_mase(df_test(), df_train(), forecasts_external()[new_methods])
+        return(cbind(mase, new_mase))
+      }
     })
+    
+    
+    
   })
   
   
@@ -273,9 +360,9 @@ server <- function(input, output) {
     #             selected = c("Train", "Test"))
     
     selectInput("selectMetrics", "Select metrics",
-                choices = c("", names_benchmarks, input$selectSubmission$name), 
+                choices = c("", names(forecasts_external()), input$selectSubmission$name), 
                 multiple = T,
-                selected = names_benchmarks[1])
+                selected = names(forecasts_external())[1])
   })
   
   output$metricsRowUi <- DT::renderDT({
@@ -304,6 +391,74 @@ server <- function(input, output) {
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
                     caption = "Mean metrics")
+  })
+  
+  output$btnRunBenchmarkUi <- renderUI({
+    
+    # Allow tests only with uploaded submission
+    req(input$selectSubmission)
+    shiny::actionButton("btnRunBenchmark", "Run benchmarks")
+  })
+  
+  observeEvent(input$btnRunBenchmark, {
+    # Read raw forecasts
+    forecasts <- forecasts_raw()
+    new_methods <- names(forecasts) # All methods in forecasts_raw are new
+    
+    # Load merged data
+    withProgress(value = 0, message = "Benchmark", {
+      
+      incProgress(1/4, detail = "Loading merged data")
+      load("./data/merged.RData")
+    
+      # Match indices over the whole dataset
+      idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1]))
+      # Remove first column in the forecasts df
+      # forecasts <- lapply(forecasts, function(fc) fc[, -1])
+      # names(forecasts) <- new_methods
+      
+      # print(forecasts[c(new_methods)])
+      
+      mase <- naive_mase[idx, -1]  
+      smape <- naive_smape[idx, -1]
+      df_train <- merged_train[idx, ]
+      df_test <- merged_test[idx, ]
+      
+      # Remove merged sets immediately
+      merged_train <- NULL
+      merged_test <- NULL
+      
+      # Calculate SMAPE and MASE
+      incProgress(2/4, detail = "Calculate SMAPE")
+      new_smape <- get_smape(df_test, df_train, forecasts[c(new_methods)])
+      # print(new_smape)
+      
+      smape <- cbind(smape, new_smape)
+      
+      incProgress(3/4, detail = "Calculate MASE")
+      new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)])
+      # print(new_mase)
+    
+      mase <- cbind(mase, new_mase)
+      
+      # Prepare tables
+      mean_mase <- apply(mase, 2, mean) %>% round(3)
+      mean_smape <- apply(smape, 2, mean) %>% round(3)
+      owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
+      
+      print(mean_mase)
+      print(mean_smape)
+      print(owa)
+      
+      incProgress(4/4, detail = "Render DT")
+      output$benchmarkResultsUI <- DT::renderDT({
+        
+        row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
+          DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
+                        options = list(dom = 't'),
+                        caption = paste("Benchmark for", input$selectSubmission$name))
+      })
+    })
   })
   
 }

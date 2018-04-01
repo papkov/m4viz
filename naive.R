@@ -75,6 +75,15 @@ res <- sapply(list.files(naive.path, full.names = F), function(file.name) {
   TRUE
 })
 
+# Make numeric
+naive <- apply(naive[, -1], 2, as.numeric) %>% 
+  cbind(naive[, 1], .) %>% 
+  as.data.frame()
+
+naive2 <- apply(naive2[, -1], 2, as.numeric) %>% 
+  cbind(naive2[, 1], .) %>% 
+  as.data.frame()
+
 # Save as csv
 write.csv(naive, 
           paste0("./data/naive_merged.csv"),
@@ -84,8 +93,81 @@ write.csv(naive2,
           paste0("./data/naive2_merged.csv"),
           row.names = F)
 
+# Create forecast list
+
+# naive_forecasts <- lapply(naive[, 1] %>% unlist %>% as.vector, 
+#                           function(rname) { # Iterate over timeseries name
+#   list("Naive" = naive[which(naive$V1 == rname), -1] %>% na.omit(),
+#        "Naive2" = naive2[which(naive2$V1 == rname), -1] %>% na.omit())
+# })
+
+naive_forecast <- list(
+  "Naive" = naive,
+  "Naive2" = naive2
+)
+
+
+
 # Save as RData
 save(naive, naive2, file = "./data/naive.RData")
+save(naive_forecast, file = "./data/naive_forecast.RData")
 
 # Load RData object
 load("./data/naive.RData")
+
+
+### Pre-calculate MASE and SMAPE for naive predictions
+
+# Open and merge all test files
+test_dfs <- lapply(dir(test.path, full.names = T), function(file.name) {
+  fread(file.name, header = T)
+})
+merged_test <- rbindlist(test_dfs, fill = T)
+
+train_dfs <- lapply(dir(train.path, full.names = T), function(file.name) {
+  fread(file.name, header = T)
+})
+merged_train <- rbindlist(train_dfs, fill = T)
+
+
+# Calculate MASE and SMAPE for naive predictions for the whole dataset
+naive_mase <- get_mase(merged_test, merged_train, naive_forecast)
+naive_mase$name <- merged_train$V1
+
+naive_smape <- get_smape(merged_test, merged_train, naive_forecast)
+naive_smape$name <- merged_train$V1
+
+# Read pytohn-generated
+naive_mase <- read.csv("./data/naive_mase.csv", header = T,
+                       stringsAsFactors = F)
+names(naive_mase)[1] = "name"
+
+write.csv(naive_smape, 
+          paste0("./data/naive_smape.csv"),
+          row.names = F)
+
+fwrite(merged_train, 
+       paste0("./data/merged_train.csv"),
+       row.names = F)
+
+fwrite(merged_test, 
+       paste0("./data/merged_test.csv"),
+       row.names = F)
+
+naive_smape <- naive_smape[, c(3, 1, 2)]
+
+save(naive_forecast, 
+     naive_smape, 
+     naive_mase, 
+     # merged_train,
+     # merged_test,
+     file = "./data/naive_forecast.RData")
+
+save(merged_train,
+     merged_test,
+     file = "./data/merged.RData")
+
+
+train_dfs <- NULL
+test_dfs <- NULL
+
