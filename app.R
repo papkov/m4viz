@@ -4,6 +4,7 @@ library(dplyr)
 library(tidyr)
 library(data.table)
 library(DT)
+library(shinycssloaders)
 
 # TODO
 # Generate reports
@@ -55,7 +56,7 @@ ui <- fluidPage(
       
     # Show a plot of the generated distribution
     mainPanel(
-       plotlyOutput("tsPlot"),
+       plotlyOutput("tsPlot") %>% withSpinner,
        br(),
        DT::DTOutput("metricsRowUi"),
        br(),
