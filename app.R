@@ -203,6 +203,7 @@ server <- function(input, output) {
     fc.fil <- lapply(forecasts_external(), function(fc) {
       # Check, where df_train row is in the forecast df
       sname <- df_train()[df_selected_index(), 1] %>% unlist
+      print(paste("Forecast names", fc[1:5, 1]))
       idx <- which(fc[, 1] == sname)
       print(paste(sname, idx))
       fc[idx, ] %>% as.numeric %>% na.omit
@@ -362,7 +363,8 @@ server <- function(input, output) {
     selectInput("selectMetrics", "Select metrics",
                 choices = c("", names(forecasts_external()), input$selectSubmission$name), 
                 multiple = T,
-                selected = names(forecasts_external())[1])
+                selected = c(names(forecasts_external())[1],
+                             input$selectSubmission$name))
   })
   
   output$metricsRowUi <- DT::renderDT({
@@ -376,7 +378,7 @@ server <- function(input, output) {
     row_metrics <- rbind(row_smape, row_mase, owa) %>% 
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
-                    caption = "Row metrics")
+                    caption = paste("Row metrics for TS:", input$selectTs))
   })
   
   output$metricsMeanUi <- DT::renderDT({
@@ -390,7 +392,7 @@ server <- function(input, output) {
     row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
-                    caption = "Mean metrics")
+                    caption = paste("Mean metrics for the set:", input$selectSize))
   })
   
   output$btnRunBenchmarkUi <- renderUI({
@@ -405,60 +407,126 @@ server <- function(input, output) {
     forecasts <- forecasts_raw()
     new_methods <- names(forecasts) # All methods in forecasts_raw are new
     
-    # Load merged data
-    withProgress(value = 0, message = "Benchmark", {
-      
-      incProgress(1/4, detail = "Loading merged data")
-      load("./data/merged.RData")
+    # IF you want lo load domain sequentially, use code below
+    # Open and process train and test files sequentially
     
-      # Match indices over the whole dataset
-      idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1]))
-      # Remove first column in the forecasts df
-      # forecasts <- lapply(forecasts, function(fc) fc[, -1])
-      # names(forecasts) <- new_methods
-      
-      # print(forecasts[c(new_methods)])
-      
-      mase <- naive_mase[idx, -1]  
-      smape <- naive_smape[idx, -1]
-      df_train <- merged_train[idx, ]
-      df_test <- merged_test[idx, ]
-      
-      # Remove merged sets immediately
-      merged_train <- NULL
-      merged_test <- NULL
-      
-      # Calculate SMAPE and MASE
-      incProgress(2/4, detail = "Calculate SMAPE")
-      new_smape <- get_smape(df_test, df_train, forecasts[c(new_methods)])
-      # print(new_smape)
-      
-      smape <- cbind(smape, new_smape)
-      
-      incProgress(3/4, detail = "Calculate MASE")
-      new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)])
-      # print(new_mase)
+    # Create empty dataframes to store calculated MASE and SMAPE
+    mase <- data.frame()
+    smape <- data.frame()
     
-      mase <- cbind(mase, new_mase)
-      
-      # Prepare tables
-      mean_mase <- apply(mase, 2, mean) %>% round(3)
-      mean_smape <- apply(smape, 2, mean) %>% round(3)
-      owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
-      
-      print(mean_mase)
-      print(mean_smape)
-      print(owa)
-      
-      incProgress(4/4, detail = "Render DT")
-      output$benchmarkResultsUI <- DT::renderDT({
-        
-        row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
+    bmarks <- sapply(DIR_TRAIN %>% sprintf(DIR_DATA, input$selectSize) %>% dir,
+           function(file.name) {
+             
+             withProgress(value = 0, message = paste("Process", file.name), {
+               # Read domain files
+               incProgress(1/3, detail = "Read data")
+               train.path <- paste0(sprintf(DIR_TRAIN, DIR_DATA, input$selectSize), file.name)
+               test.path <- paste0(sprintf(DIR_TEST, DIR_DATA, input$selectSize), file.name)
+               df_train <- read_df(train.path, input$selectSize)
+               df_test <- read_df(test.path, input$selectSize)
+               
+               # Check indices that are matched from forecast to the current loaded set
+               idx <- match(unlist(forecasts[[1]][, 1]), unlist(df_train[, 1])) %>% 
+                 na.omit %>% as.numeric
+               
+               # If all indices are NA, omit this dataset
+               if (identical(idx, numeric(0))) {
+                 print("Indices not found!")
+                 return(FALSE)
+               }
+               
+               # Calculate benchmarks
+               incProgress(2/3, detail = "Get SMAPE")
+               new_smape <- get_smape(df_test, df_train, forecasts[c(new_methods)])
+               incProgress(3/3, detail = "Get MASE")
+               new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)])
+               
+               # Write outside of the cycle
+               smape <<- rbind(smape, new_smape)
+               mase <<- rbind(mase, new_mase) 
+               
+               return(TRUE)
+             })
+           })
+    
+    # Show status for different domains
+    print(bmarks)
+    
+    # Subset precalculated naive predictions
+    idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1]))
+    mase <- data.frame(naive_mase[idx, -1], mase)
+    smape <- data.frame(naive_smape[idx, -1], smape)
+    
+    mean_mase <- apply(mase, 2, mean) %>% round(3)
+    mean_smape <- apply(smape, 2, mean) %>% round(3)
+    owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
+    
+    print(mean_mase)
+    print(mean_smape)
+    print(owa)
+
+    output$benchmarkResultsUI <- DT::renderDT({
+      rbind(mean_smape, mean_mase, owa) %>%
           DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                         options = list(dom = 't'),
                         caption = paste("Benchmark for", input$selectSubmission$name))
-      })
     })
+    
+    # ELSE IF you want to load merged dataset, use code below
+    # Load merged data
+    # withProgress(value = 0, message = "Benchmark", {
+    #   
+    #   incProgress(1/4, detail = "Loading merged data")
+    #   load("./data/merged.RData")
+    # 
+    #   # Match indices over the whole dataset
+    #   idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1]))
+    #   # Remove first column in the forecasts df
+    #   # forecasts <- lapply(forecasts, function(fc) fc[, -1])
+    #   # names(forecasts) <- new_methods
+    #   
+    #   # print(forecasts[c(new_methods)])
+    #   
+    #   mase <- naive_mase[idx, -1]  
+    #   smape <- naive_smape[idx, -1]
+    #   df_train <- merged_train[idx, ]
+    #   df_test <- merged_test[idx, ]
+    #   
+    #   # Remove merged sets immediately
+    #   merged_train <- NULL
+    #   merged_test <- NULL
+    #   
+    #   # Calculate SMAPE and MASE
+    #   incProgress(2/4, detail = "Calculate SMAPE")
+    #   new_smape <- get_smape(df_test, df_train, forecasts[c(new_methods)])
+    #   # print(new_smape)
+    #   
+    #   smape <- cbind(smape, new_smape)
+    #   
+    #   incProgress(3/4, detail = "Calculate MASE")
+    #   new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)])
+    #   # print(new_mase)
+    # 
+    #   mase <- cbind(mase, new_mase)
+    #   
+    #   # Prepare tables
+    #   mean_mase <- apply(mase, 2, mean) %>% round(3)
+    #   mean_smape <- apply(smape, 2, mean) %>% round(3)
+    #   owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
+    #   
+    #   print(mean_mase)
+    #   print(mean_smape)
+    #   print(owa)
+    #   
+    #   incProgress(4/4, detail = "Render DT")
+    #   output$benchmarkResultsUI <- DT::renderDT({
+    #     
+    #     row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
+    #       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
+    #                     options = list(dom = 't'),
+    #                     caption = paste("Benchmark for", input$selectSubmission$name))
+    #   })
+    # })
   })
   
 }
