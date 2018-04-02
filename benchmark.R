@@ -1,5 +1,7 @@
 names_benchmarks <- c("Naive", "sNaive", "Naive2", "SES", "Holt", "Damped", "Theta", "Com")
 library(compiler)
+# Uncomment if using standart forecasting functions
+#library(forecast)
 
 ## Metrics code are provided by organizers, I won't change them
 

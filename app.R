@@ -3,17 +3,13 @@ library(plotly)
 library(dplyr)
 library(tidyr)
 library(data.table)
-library(forecast)
 library(DT)
-
-library(compiler)
-enableJIT(3)
 
 # TODO
 # Generate reports
 # Histo
 
-options(shiny.maxRequestSize=300*1024^2) 
+options(shiny.maxRequestSize=30*1024^2) 
 
 # Prepare template path to the data
 DIR_DATA <- "./data/"
