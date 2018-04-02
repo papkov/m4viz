@@ -28,6 +28,7 @@ naive_smape <- NULL
 naive_mase <- NULL
 merged_train <- NULL
 merged_test <- NULL
+scaling <- NULL
 load("./data/naive_forecast.RData")
 
 # Define UI for application that draws a histogram
@@ -283,7 +284,8 @@ server <- function(input, output) {
     req(forecasts_external())
     
     idx <- match(unlist(df_train()[, 1]), unlist(naive_mase[, 1]))
-    mase <- naive_mase[idx, -1]    
+    mase <- naive_mase[idx, -1]
+    masep <- scaling[idx, -1]
     
     # Check for methods in forecasts_external others than naive and naive2
     methods <- names(forecasts_external())
@@ -293,7 +295,7 @@ server <- function(input, output) {
       if (identical(new_methods, character(0))) {
         return(mase)
       } else {
-        new_mase <- get_mase(df_test(), df_train(), forecasts_external()[new_methods])
+        new_mase <- get_mase(df_test(), df_train(), forecasts_external()[new_methods], masep)
         return(cbind(mase, new_mase))
       }
     })
@@ -434,17 +436,23 @@ server <- function(input, output) {
                idx <- match(unlist(forecasts[[1]][, 1]), unlist(df_train[, 1])) %>% 
                  na.omit %>% as.numeric
                
+               
+               
                # If all indices are NA, omit this dataset
                if (identical(idx, numeric(0))) {
                  print("Indices not found!")
                  return(FALSE)
                }
                
+               # Get scaling
+               sc_idx <- match(unlist(df_train[, 1]), unlist(scaling[, 1]))
+               masep <- scaling[sc_idx, -1]
+               
                # Calculate benchmarks
                incProgress(2/3, detail = "Get SMAPE")
                new_smape <- get_smape(df_test, df_train, forecasts[c(new_methods)])
                incProgress(3/3, detail = "Get MASE")
-               new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)])
+               new_mase <- get_mase(df_test, df_train, forecasts[c(new_methods)], masep)
                
                # Write outside of the cycle
                smape <<- rbind(smape, new_smape)

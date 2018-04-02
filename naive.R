@@ -142,6 +142,9 @@ naive_mase <- read.csv("./data/naive_mase.csv", header = T,
                        stringsAsFactors = F)
 names(naive_mase)[1] = "name"
 
+scaling <- read.csv("./data/scaling.csv", header = T,
+                    stringsAsFactors = F)
+
 write.csv(naive_smape, 
           paste0("./data/naive_smape.csv"),
           row.names = F)
@@ -156,9 +159,11 @@ fwrite(merged_test,
 
 naive_smape <- naive_smape[, c(3, 1, 2)]
 
+load("./data/naive_forecast.RData")
 save(naive_forecast, 
      naive_smape, 
      naive_mase, 
+     scaling,
      # merged_train,
      # merged_test,
      file = "./data/naive_forecast.RData")
@@ -171,3 +176,23 @@ save(merged_train,
 train_dfs <- NULL
 test_dfs <- NULL
 
+
+########
+library(rbenchmark)
+train <- read.csv("data/10000/train/Daily.csv")
+test <- read.csv("data/10000/test/Daily.csv")
+
+benchmark(
+  # "MASE cpp" = sapply(1:100, function(i) mase_cal_cpp(as.numeric(train[i, -1]), 
+  #                                                     as.numeric(test[i, -1]), 
+  #                                                     as.numeric(test[i, -1]))),
+  "MASE ord" = sapply(1:10000, function(i) mase_cal(as.numeric(train[i, -1]), 
+                                                  as.numeric(test[i, -1]), 
+                                                  as.numeric(test[i, -1]),
+                                                  as.numeric(scaling[i, -1]))),
+  # "SMAPE cpp" = sapply(1:100, function(i) smape_cal_cpp(as.numeric(test[i, -1]), 
+  #                                                       as.numeric(test[i, -1]))),
+  "SMAPE ord" = sapply(1:10000, function(i) smape_cal(as.numeric(test[i, -1]), 
+                                                    as.numeric(test[i, -1]))),
+  replications = 1
+)

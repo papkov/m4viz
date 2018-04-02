@@ -1,5 +1,6 @@
 names_benchmarks <- c("Naive", "sNaive", "Naive2", "SES", "Holt", "Damped", "Theta", "Com")
 library(compiler)
+library(Rcpp)
 # Uncomment if using standart forecasting functions
 #library(forecast)
 
@@ -14,7 +15,26 @@ smape_cal <- cmpfun(function(outsample, forecasts){
   return(mean(smape))
 })
 
-mase_cal <- cmpfun(function(insample, outsample, forecasts){
+# smape_cal_cpp <- cppFunction('
+# double smape_cal(NumericVector outsample, NumericVector forecasts) {
+#   
+#   if (outsample.size() != forecasts.size()) {
+#     return -1;
+#   }
+#   
+#   double absdif = 0;
+#   double abssum = 0;
+# 
+#   for (int i = 0; i != outsample.size(); ++i) {
+#     absdif += abs(outsample[i] - forecasts[i]);
+#     abssum += abs(outsample[i]) + abs(forecasts[i]);
+#   }
+#   
+#   double smape = absdif * 200 / abssum;
+#   return smape;
+# }')
+
+mase_cal <- cmpfun(function(insample, outsample, forecasts, scaling = NA){
   # estimate MASE
   # frq <- stats::frequency(insample)
   frq <- 1
@@ -33,7 +53,11 @@ mase_cal <- cmpfun(function(insample, outsample, forecasts){
   # # }
   
   # masep <- mean(abs(insample-forecastsNaiveSD), na.rm = TRUE)
-  masep <- mean(abs(diff(insample, frq)))
+  if (is.na(scaling)) {
+    masep <- mean(abs(diff(insample, frq)))
+  } else {
+    masep <- scaling
+  }
   
   outsample <- as.numeric(outsample)
   forecasts <- as.numeric(forecasts)
@@ -41,6 +65,37 @@ mase_cal <- cmpfun(function(insample, outsample, forecasts){
   
   return(mean(mase))
 })
+
+# Scaled version
+mase_cal_scaled <- cmpfun(function(outsample, forecasts, masep){
+  mean(abs(outsample-forecasts) / masep)
+})
+
+# mase_cal_cpp <- cppFunction('
+# double mase_cal(NumericVector insample, NumericVector outsample, NumericVector forecasts) {
+#   
+#   if (outsample.size() != forecasts.size()) {
+#     return -1;
+#   }
+# 
+#   double diff = 0;
+# 
+#   for (int i = 1; i != insample.size(); ++i) {
+#     diff += abs(insample[i] - insample[i-1]);
+#   }
+# 
+#   double masep = diff / (insample.size() - 1);
+#   
+# 
+#   double absdif = 0;
+# 
+#   for (int i = 0; i != outsample.size(); ++i) {
+#     absdif += abs(outsample[i] - forecasts[i]);
+#   }
+#   
+#   double mase = absdif / masep;
+#   return mase;
+# }')
 
 
 naive_seasonal <- function(input, fh){
@@ -240,7 +295,7 @@ get_smape <- cmpfun(function(data_test, data_train, forecasts) {
   as.data.frame(smape)
 })
 
-get_mase <- cmpfun(function(data_test, data_train, forecasts) {
+get_mase <- cmpfun(function(data_test, data_train, forecasts, scaling = NA) {
   mase <- lapply(forecasts, function(fc.df) {
     # Make a subset of forecast (data_train supposed to be sorted)
     # fc.idx <- which(fc.df[, 1] %in% data_train[, 1])
@@ -250,10 +305,14 @@ get_mase <- cmpfun(function(data_test, data_train, forecasts) {
     # Iterate over data_test rows
     pb <- txtProgressBar(max = nrow(data_test), style = 3)
     mase <- sapply(1:nrow(data_test), function(i) {
-      train <- na.omit(as.numeric(data_train[i, -1]))
       test <- na.omit(as.numeric(data_test[i, ]))
       fc <- na.omit(as.numeric(fc.df[i, ]))
-      m <- mase_cal(train, test, fc)
+      if (is.na(scaling[1])) {
+        train <- na.omit(as.numeric(data_train[i, -1]))
+        m <- mase_cal(train, test, fc)
+      } else {
+        m <- mase_cal_scaled(test, fc, as.numeric(scaling[i]))
+      }
       
       setTxtProgressBar(pb, i)
       #tsensembler::mase(as.numeric(data_test[i, ]), fc)
