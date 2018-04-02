@@ -49,6 +49,7 @@ ui <- fluidPage(
                           ".csv")),
      
      br(),
+     uiOutput("checkboxUi"),
      uiOutput("selectSizeUi"),
      uiOutput("selectTsUi"),
      uiOutput("selectRowUi"),
@@ -370,6 +371,7 @@ server <- function(input, output) {
   output$metricsRowUi <- DT::renderDT({
     req(input$selectSize)
     req(input$selectTs)
+    req(input$chkMetrics)
     
     row_smape <- smape()[df_selected_index(), ] %>% round(3)
     row_mase <- mase()[df_selected_index(), ] %>% round(3)
@@ -384,6 +386,7 @@ server <- function(input, output) {
   output$metricsMeanUi <- DT::renderDT({
     
     req(input$selectSize)
+    req(input$chkMetrics)
     
     mean_mase <- apply(mase(), 2, mean) %>% round(3)
     mean_smape <- apply(smape(), 2, mean) %>% round(3)
@@ -393,6 +396,11 @@ server <- function(input, output) {
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
                     caption = paste("Mean metrics for the set:", input$selectTs, input$selectSize))
+  })
+  
+  output$checkboxUi <- renderUI({
+    checkboxInput("chkMetrics", "Calculate MASE and SMAPE", 
+                  value = T)
   })
   
   output$btnRunBenchmarkUi <- renderUI({
