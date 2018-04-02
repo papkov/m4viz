@@ -378,7 +378,7 @@ server <- function(input, output) {
     row_metrics <- rbind(row_smape, row_mase, owa) %>% 
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
-                    caption = paste("Row metrics for TS:", input$selectTs))
+                    caption = paste("Row metrics for the row:", input$selectRow))
   })
   
   output$metricsMeanUi <- DT::renderDT({
@@ -392,7 +392,7 @@ server <- function(input, output) {
     row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
       DT::datatable(rownames = c("SMAPE", "MASE", "OWA"),
                     options = list(dom = 't'),
-                    caption = paste("Mean metrics for the set:", input$selectSize))
+                    caption = paste("Mean metrics for the set:", input$selectTs, input$selectSize))
   })
   
   output$btnRunBenchmarkUi <- renderUI({
