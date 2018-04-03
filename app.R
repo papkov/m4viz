@@ -144,7 +144,8 @@ server <- function(input, output) {
       path <- f["datapath"][[1]]
       name <- f["name"][[1]]
       
-      fread(path, header = T, sep = ",")
+      read.csv(path, sep = ",", header = F, skip = 1, stringsAsFactors = F)
+      # fread(path, header = F, sep = ",", skip = 1)
     })
     
     names(fc.dfs) <- input$selectSubmission$name
@@ -167,10 +168,10 @@ server <- function(input, output) {
         # df <- fread(path, header = T, sep = ",")
         # print(df)
         # Order by naive predictions
-        df <- df[match(df$V1, fe$Naive$V1) %>% order, ]
+        df <- df[match(df[, 1], fe$Naive$V1) %>% order, ]
         
         # Subset by intersection with the train data
-        df <- df[df$V1 %in% df_train()$V1, ]
+        df <- df[df[, 1] %in% df_train()$V1, ]
         # TODO make forecast invariant to sorting
         
         # Update default forecast
@@ -196,22 +197,29 @@ server <- function(input, output) {
     
     req(df_selected_index())
     req(df_train())
+    req(df_test())
     req(input$selectMetrics)
     
     # For each forecast df extract a particular row
     fc.fil <- lapply(forecasts_external(), function(fc) {
       # Check, where df_train row is in the forecast df
       sname <- df_train()[df_selected_index(), 1] %>% unlist
-      print(paste("Forecast names", fc[1:5, 1]))
+      print(fc[1:5, 1])
+      # print(fc)
       idx <- which(fc[, 1] == sname)
-      print(paste(sname, idx))
-      fc[idx, ] %>% as.numeric %>% na.omit
-    }) 
-    names(fc.fil) <- names(forecasts_external())
+      print(paste("Selected", sname, idx))
+      fc <- fc[idx, ] %>% as.numeric %>% na.omit
+      print(length(fc))
+      
+      # Define max length of predictions row
+      fc[1:ncol(df_test())]
+    }) %>% data.frame()
     
-    fc.fil %>% 
-      data.frame %>% 
-      select(input$selectMetrics)
+    # print(fc.fil)
+    
+    # names(fc.fil) <- names(forecasts_external())
+    
+    select(fc.fil, input$selectMetrics)
     
     # Deprecated
     # forecasts_external()[[df_selected_index()]] %>%

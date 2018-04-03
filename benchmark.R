@@ -8,8 +8,8 @@ library(Rcpp)
 
 smape_cal <- cmpfun(function(outsample, forecasts){
   # estimate sMAPE
-  outsample <- as.numeric(outsample)
-  forecasts <- as.numeric(forecasts)
+  # outsample <- as.numeric(outsample)
+  # forecasts <- as.numeric(forecasts)
   smape <- (abs(outsample - forecasts) * 200) / (abs(outsample) + abs(forecasts))
   
   return(mean(smape))
@@ -277,17 +277,23 @@ get_smape <- cmpfun(function(data_test, data_train, forecasts) {
     fc.idx <- match(unlist(data_train[, 1]), unlist(fc.df[, 1])) # Invariant to the forecats sorting
     fc.df <- fc.df[fc.idx, -1]
     
-    pb <- txtProgressBar(max = nrow(data_test), style = 3)
+    # pb <- txtProgressBar(max = nrow(data_test), style = 3)
     # Iterate over data_test rows
+    
+    
     smape <- sapply(1:nrow(data_test), function(i) {
-      fc <- fc.df[i, ] %>% as.numeric %>% na.omit
-      test <- data_test[i, ] %>% as.numeric %>% na.omit
-      s <- smape_cal(test, fc)
+      fc <- na.omit(as.numeric(fc.df[i, ]))
+      test <- na.omit(as.numeric(data_test[i, ]))
       
-      setTxtProgressBar(pb, i)
+      # If train and forecast are of different lengths
+      minl <- min(length(test), length(fc))
+      
+      s <- smape_cal(test[1:minl], fc[1:minl])
+      
+      # setTxtProgressBar(pb, i)
       s
     })
-    close(pb)
+    # close(pb)
     smape
   })
   
@@ -303,23 +309,29 @@ get_mase <- cmpfun(function(data_test, data_train, forecasts, scaling = NA) {
     fc.df <- fc.df[fc.idx, -1]
     
     # Iterate over data_test rows
-    pb <- txtProgressBar(max = nrow(data_test), style = 3)
+    # pb <- txtProgressBar(max = nrow(data_test), style = 3)
+    
+    
     mase <- sapply(1:nrow(data_test), function(i) {
       test <- na.omit(as.numeric(data_test[i, ]))
       fc <- na.omit(as.numeric(fc.df[i, ]))
+      
+      # If train and forecast are of different lengths
+      minl <- min(length(test), length(fc))
+      
       if (is.na(scaling[1])) {
         train <- na.omit(as.numeric(data_train[i, -1]))
-        m <- mase_cal(train, test, fc)
+        m <- mase_cal(train, test[1:minl], fc[1:minl])
       } else {
         m <- mase_cal_scaled(test, fc, as.numeric(scaling[i]))
       }
       
-      setTxtProgressBar(pb, i)
+      # setTxtProgressBar(pb, i)
       #tsensembler::mase(as.numeric(data_test[i, ]), fc)
       #TSrepr::mase()
       m
     })
-    close(pb)
+    # close(pb)
     
     mase
   })
