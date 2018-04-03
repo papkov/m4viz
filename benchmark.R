@@ -285,7 +285,7 @@ get_smape <- cmpfun(function(data_test, data_train, forecasts) {
       fc <- na.omit(as.numeric(fc.df[i, ]))
       test <- na.omit(as.numeric(data_test[i, ]))
       
-      # If train and forecast are of different lengths
+      # If test and forecast are of different lengths
       minl <- min(length(test), length(fc))
       
       s <- smape_cal(test[1:minl], fc[1:minl])
@@ -316,7 +316,7 @@ get_mase <- cmpfun(function(data_test, data_train, forecasts, scaling = NA) {
       test <- na.omit(as.numeric(data_test[i, ]))
       fc <- na.omit(as.numeric(fc.df[i, ]))
       
-      # If train and forecast are of different lengths
+      # If test and forecast are of different lengths
       minl <- min(length(test), length(fc))
       
       if (is.na(scaling[1])) {
