@@ -323,7 +323,7 @@ get_mase <- cmpfun(function(data_test, data_train, forecasts, scaling = NA) {
         train <- na.omit(as.numeric(data_train[i, -1]))
         m <- mase_cal(train, test[1:minl], fc[1:minl])
       } else {
-        m <- mase_cal_scaled(test, fc, as.numeric(scaling[i]))
+        m <- mase_cal_scaled(test[1:minl], fc[1:minl], as.numeric(scaling[i]))
       }
       
       # setTxtProgressBar(pb, i)

@@ -24,7 +24,8 @@ res <- sapply(list.files(train.path, full.names = F), function(file.name) {
   # Naive
   naive.predictions <- apply(train, 1, function(row) {
     row <- na.omit(row)
-    c(row[1], row %>% last %>% as.numeric %>% rep(horizon))
+    # c(row[1], row %>% last %>% as.numeric %>% rep(horizon))
+    c(row[1], naive(row[-1], h = horizon))
   }) %>% t() %>% as_tibble()
   
   # Naive 2
@@ -51,26 +52,16 @@ res <- sapply(list.files(train.path, full.names = F), function(file.name) {
 
 
 # Merge files
-naive <- NULL
-naive2 <- NULL
+naive <- data.frame()
+naive2 <- data.frame()
 
 res <- sapply(list.files(naive.path, full.names = F), function(file.name) {
   print(file.name)
   fn <- fread(paste0(naive.path, file.name))
   fn2 <- fread(paste0(naive2.path, file.name))
   
-  if(is.null(naive)) {
-    naive <<- fn
-  } else {
-    naive <<- rbind(naive, fn, fill = T)
-  }
-  
-  
-  if(is.null(naive2)) {
-    naive2 <<- fn2
-  } else {
-    naive2 <<- rbind(naive2, fn2, fill = T)
-  }
+  naive <<- rbind(naive, fn, fill = T)
+  naive2 <<- rbind(naive2, fn2, fill = T)
   
   TRUE
 })

@@ -144,7 +144,11 @@ server <- function(input, output) {
       path <- f["datapath"][[1]]
       name <- f["name"][[1]]
       
-      read.csv(path, sep = ",", header = F, skip = 1, stringsAsFactors = F)
+      # df <- read.csv(path, sep = ",", header = F, skip = 1, stringsAsFactors = F)
+      df <- fread(path, sep = ",", header = T, skip = 0, 
+                  stringsAsFactors = F, fill = T, data.table = F)
+      paste(name, nrow(df)) %>% print()
+      df
       # fread(path, header = F, sep = ",", skip = 1)
     })
     
@@ -474,7 +478,8 @@ server <- function(input, output) {
     print(bmarks)
     
     # Subset precalculated naive predictions
-    idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1]))
+    idx <- match(unlist(forecasts[[1]][, 1]), unlist(naive_smape[, 1])) %>% na.omit() %>% as.numeric()
+    paste("fc", nrow(forecasts[[1]]), "idx len", length(idx), "mase len", nrow(mase), "smape len", nrow(smape)) %>% print
     mase <- data.frame(naive_mase[idx, -1], mase)
     smape <- data.frame(naive_smape[idx, -1], smape)
     
