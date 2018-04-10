@@ -147,6 +147,10 @@ server <- function(input, output) {
       # df <- read.csv(path, sep = ",", header = F, skip = 1, stringsAsFactors = F)
       df <- fread(path, sep = ",", header = T, skip = 0, 
                   stringsAsFactors = F, fill = T, data.table = F)
+      
+      # Save the submission separately
+      write.csv(df, file=paste0("./submission/", name, format(Sys.time(), '%Y%m%d_%H%M%s'), ".csv"))
+      
       paste(name, nrow(df)) %>% print()
       df
       # fread(path, header = F, sep = ",", skip = 1)

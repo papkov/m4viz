@@ -1,5 +1,6 @@
 /python/.ipynb_checkpoints/*
 /data/*
+/submission/*
 
 # History files
 .Rhistory

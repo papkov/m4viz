@@ -172,7 +172,7 @@ compute_deseason <- function(input, fh) {
   ppy <- frequency(input) 
   ST <- F
   if (ppy > 1) { 
-    ST <- SeasonalityTest(input,ppy) 
+    ST <- SeasonalityTest(input, ppy) 
   }
   
   if (ST){

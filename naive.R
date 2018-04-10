@@ -25,16 +25,25 @@ res <- sapply(list.files(train.path, full.names = F), function(file.name) {
   naive.predictions <- apply(train, 1, function(row) {
     row <- na.omit(row)
     # c(row[1], row %>% last %>% as.numeric %>% rep(horizon))
-    c(row[1], naive(row[-1], h = horizon))
-  }) %>% t() %>% as_tibble()
+    naive(as.numeric(row[-1]), h = horizon)$mean
+  }) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    cbind(id = unlist(train[, 1]), ., stringsAsFactors = F) %>% 
+    as_tibble()
   
   # Naive 2
   naive2.predictions <- apply(train, 1, function(row) {
-    row <- row %>% na.omit
+    row <- na.omit(row)
     des <- compute_deseason(as.numeric(row[-1]), horizon)
-    f3 <- naive(des$input, h = horizon)$mean * des$SIout
-    c(row[1], f3)
-  }) %>% t() %>% as_tibble()
+    naive(des$input, h = horizon)$mean * des$SIout
+  }) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    cbind(id = unlist(train[, 1]), ., stringsAsFactors = F) %>% 
+    as_tibble()
+  
+  identical(naive.predictions, naive2.predictions) %>% paste("Identical:", .) %>% print()
   
   
   # Save naive predictions
