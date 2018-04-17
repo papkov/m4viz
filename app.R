@@ -403,8 +403,8 @@ server <- function(input, output) {
     req(input$selectSize)
     req(input$chkMetrics)
     
-    mean_mase <- apply(mase(), 2, mean) %>% round(3)
-    mean_smape <- apply(smape(), 2, mean) %>% round(3)
+    mean_mase <- apply(mase(), 2, function(x) mean(x[is.finite(x)], na.rm = T)) %>% round(3)
+    mean_smape <- apply(smape(), 2, function(x) mean(x[is.finite(x)], na.rm = T)) %>% round(3)
     owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
     
     row_metrics <- rbind(mean_smape, mean_mase, owa) %>% 
@@ -487,8 +487,8 @@ server <- function(input, output) {
     mase <- data.frame(naive_mase[idx, -1], mase)
     smape <- data.frame(naive_smape[idx, -1], smape)
     
-    mean_mase <- apply(mase, 2, mean) %>% round(3)
-    mean_smape <- apply(smape, 2, mean) %>% round(3)
+    mean_mase <- apply(mase, 2, function(x) mean(x[is.finite(x)], na.rm = T)) %>% round(3)
+    mean_smape <- apply(smape, 2, function(x) mean(x[is.finite(x)], na.rm = T)) %>% round(3)
     owa <- ((mean_mase/mean_mase["Naive2"] + mean_smape/mean_smape["Naive2"]) / 2) %>% round(3)
     
     print(mean_mase)

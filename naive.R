@@ -131,7 +131,7 @@ merged_train <- rbindlist(train_dfs, fill = T)
 
 
 # Calculate MASE and SMAPE for naive predictions for the whole dataset
-naive_mase <- get_mase(merged_test, merged_train, naive_forecast)
+naive_mase <- get_mase(merged_test, merged_train, naive_forecast, scaling = scaling)
 naive_mase$name <- merged_train$V1
 
 naive_smape <- get_smape(merged_test, merged_train, naive_forecast)
