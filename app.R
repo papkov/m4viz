@@ -5,12 +5,18 @@ library(tidyr)
 library(data.table)
 library(DT)
 library(shinycssloaders)
+#library(sparklines)
+library(sparkline)
+library(htmlwidgets)
+
 
 # TODO
 # Generate reports
 # Histo
 
 options(shiny.maxRequestSize=300*1024^2) 
+options(shiny.fullstacktrace = F)
+options(shiny.trace = F)
 
 # Prepare template path to the data
 DIR_DATA <- "./data/"
@@ -33,7 +39,7 @@ load("./data/naive_forecast.RData")
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
-   
+   htmlwidgets::getDependency("sparkline", "sparkline"),
    # Application title
    titlePanel("M4 visualization"),
    
@@ -57,19 +63,50 @@ ui <- fluidPage(
       
     # Show a plot of the generated distribution
     mainPanel(
+       # htmlwidgets::getDependency('sparkline'),
        plotlyOutput("tsPlot") %>% withSpinner,
-       br(),
-       DT::DTOutput("metricsRowUi"),
-       br(),
-       DT::DTOutput("metricsMeanUi"),
-       br(),
-       DT::DTOutput("benchmarkResultsUI")
+       tabsetPanel(
+         tabPanel(
+           title = "Mean metrics",
+           br(),
+           DT::DTOutput("metricsRowUi"),
+           br(),
+           DT::DTOutput("metricsMeanUi"),
+           br(),
+           DT::DTOutput("benchmarkResultsUI"),
+           br()
+         ),
+         
+         tabPanel(
+           title = "Row metrics",
+           # htmlwidgets::getDependency('sparkline'),
+           tagList(
+             DT::dataTableOutput("allRowMetricsUi"),
+             htmlwidgets::getDependency("sparkline", "sparkline")
+           ),
+           # DT::DTOutput("detailed_overview"),
+           br() ## sparklines
+         )
+       )
+    ),
+   
+   # JS listeners
+   tags$head(
+     # tags$script(src="jquery.sparkline.js"),
+     tags$script('
+      pressedKeyCount = 0;
+                   $(document).on("keydown", function (e) {
+                   Shiny.onInputChange("pressedKey", pressedKeyCount++);
+                   Shiny.onInputChange("pressedKeyId", e.which);
+                   });'
     )
+   )
+   
  )
 
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   # Reactive ######
   
@@ -425,6 +462,89 @@ server <- function(input, output) {
     shiny::actionButton("btnRunBenchmark", "Run benchmarks")
   })
   
+  
+  output$allRowMetricsUi <- renderDataTable({
+    req(input$selectSize)
+    req(input$selectSubmission)
+    
+    path <- input$selectSubmission["datapath"][[1]]
+    name <- input$selectSubmission["name"][[1]]
+    
+    # Create combined sparklines for test data and predictions
+    df_test <- as.data.frame(df_test())
+    forecasts <- forecasts_external()[[name]]
+    
+    withProgress(message = "Draw sparklines", value = 1, {
+      sls <- sapply(1:nrow(df_test), function(i) {
+        sparkline::spk_composite(
+          sparkline::sparkline(
+            round(as.vector(na.omit(unlist(df_test[i, ]))), 3),
+            type="line",
+            fillColor = FALSE,
+            width = 80,
+            height = 60,
+            lineColor ='blue'),
+          sparkline::sparkline(
+            round(as.vector(na.omit(unlist(forecasts[i, -1]))), 3),
+            type="line",
+            fillColor = FALSE,
+            width = 80,
+            height = 60,
+            lineColor ='red')
+        ) %>% 
+          htmltools::as.tags() %>% as.character()
+      })
+    })
+    
+    
+    data.frame(
+      row.names = forecasts[,1],
+      sparkline = sls,
+      MASE = mase()[[name]],
+      SMAPE = smape()[[name]]
+    ) 
+  }, 
+    escape = F,
+    selection = list(mode = "single"),
+    options = list(dom = 'pt',
+                   fnDrawCallback = htmlwidgets::JS('function(){debugger;HTMLWidgets.staticRender();}'),
+                   scrollY = '400px',
+                   paging = FALSE
+    ))
+  
+  # Imply row selection from table
+  observe({
+    r <- input$allRowMetricsUi_rows_selected
+    
+    updateSelectInput(session, "selectRow",
+                      "Select row",
+                      choices = df_train()[, 1],
+                      selected = if(length(r) == 0) df_train()[1, 1] else df_train()[, 1][r])
+  })
+  
+  # Move by arrows
+  observeEvent(input$pressedKey, {
+    up = 81
+    down = 90
+    
+    req(input$selectRow)
+    
+    print(input$pressedKeyId)
+    
+    current_idx = which(input$selectRow == df_train()[, 1])
+    
+    if (input$pressedKeyId == up) {
+      current_idx = max(1, current_idx-1)
+    } else if (input$pressedKeyId == down) {
+      current_idx = min(nrow(df_train()), current_idx+1)
+    }
+    
+    updateSelectInput(session, "selectRow",
+                      "Select row",
+                      choices = df_train()[, 1],
+                      selected = df_train()[current_idx, 1])
+  })
+  
   observeEvent(input$btnRunBenchmark, {
     # Read raw forecasts
     forecasts <- forecasts_raw()
@@ -557,6 +677,8 @@ server <- function(input, output) {
     #                     caption = paste("Benchmark for", input$selectSubmission$name))
     #   })
     # })
+    
+
   })
   
 }
