@@ -253,7 +253,7 @@ server <- function(input, output, session) {
       # print(fc)
       idx <- which(fc[, 1] == sname)
       print(paste("Selected", sname, idx))
-      fc <- fc[idx, ] %>% as.numeric %>% na.omit
+      fc <- fc[idx, ] %>% unlist %>% as.numeric %>% na.omit
       print(length(fc))
       
       # Define max length of predictions row
@@ -451,9 +451,16 @@ server <- function(input, output, session) {
   })
   
   output$checkboxUi <- renderUI({
-    checkboxInput("chkMetrics", "Calculate MASE and SMAPE", 
-                  value = T)
+    tagList(
+      checkboxInput("chkMetrics", "Calculate MASE and SMAPE", 
+                    value = T),
+      checkboxInput("chkSparklines", "Draw sparklines", 
+                    value = T)
+    )
+    
   })
+  
+  
   
   output$btnRunBenchmarkUi <- renderUI({
     
@@ -470,46 +477,61 @@ server <- function(input, output, session) {
     path <- input$selectSubmission["datapath"][[1]]
     name <- input$selectSubmission["name"][[1]]
     
+    
     # Create combined sparklines for test data and predictions
+    rn <- df_train()[, 1]
     df_test <- as.data.frame(df_test())
     forecasts <- forecasts_external()[[name]]
     
-    withProgress(message = "Draw sparklines", value = 1, {
-      sls <- sapply(1:nrow(df_test), function(i) {
-        sparkline::spk_composite(
-          sparkline::sparkline(
-            round(as.vector(na.omit(unlist(df_test[i, ]))), 3),
-            type="line",
-            fillColor = FALSE,
-            width = 80,
-            height = 60,
-            lineColor ='blue'),
-          sparkline::sparkline(
-            round(as.vector(na.omit(unlist(forecasts[i, -1]))), 3),
-            type="line",
-            fillColor = FALSE,
-            width = 80,
-            height = 60,
-            lineColor ='red')
-        ) %>% 
-          htmltools::as.tags() %>% as.character()
+    if (input$chkSparklines) {
+      withProgress(message = "Draw sparklines", value = 1, {
+        sls <- sapply(1:nrow(df_test), function(i) {
+          sparkline::spk_composite(
+            sparkline::sparkline(
+              round(as.vector(na.omit(unlist(df_test[i, ]))), 3),
+              type="line",
+              fillColor = FALSE,
+              width = 80,
+              height = 60,
+              lineColor ='blue'),
+            sparkline::sparkline(
+              round(as.vector(na.omit(unlist(forecasts[i, -1]))), 3),
+              type="line",
+              fillColor = FALSE,
+              width = 80,
+              height = 60,
+              lineColor ='red')
+          ) %>% 
+            htmltools::as.tags() %>% as.character()
+        })
       })
-    })
-    
-    
-    data.frame(
-      row.names = forecasts[,1],
-      sparkline = sls,
-      MASE = mase()[[name]],
-      SMAPE = smape()[[name]]
-    ) 
+      
+      
+      data.frame(
+        id = rn,
+        sparkline = sls,
+        MASE = mase()[[name]],
+        SMAPE = smape()[[name]],
+        check.rows = F,
+        check.names = F
+      ) 
+    } else {
+      data.frame(
+        id = rn,
+        MASE = mase()[[name]],
+        SMAPE = smape()[[name]],
+        check.rows = F,
+        check.names = F
+      ) 
+    }
   }, 
     escape = F,
     selection = list(mode = "single"),
     options = list(dom = 'pt',
                    fnDrawCallback = htmlwidgets::JS('function(){debugger;HTMLWidgets.staticRender();}'),
                    scrollY = '400px',
-                   paging = FALSE
+                   pageLength = 100,
+                   paging = TRUE
     ))
   
   # Imply row selection from table
